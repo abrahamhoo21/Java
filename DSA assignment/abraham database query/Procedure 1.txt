@@ -1,0 +1,77 @@
+SET serveroutput ON
+ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD';
+
+CREATE OR REPLACE PROCEDURE UpdateFlightDelay (
+    p_delayId           IN VARCHAR,
+    p_flightId          IN VARCHAR,
+    p_reason            IN VARCHAR,
+    p_delayDuration     IN NUMBER
+) AS
+    -- Custom exceptions
+    delay_not_found EXCEPTION;
+    flight_id_not_found EXCEPTION;
+    negative_delay_duration EXCEPTION;
+
+    PRAGMA EXCEPTION_INIT(delay_not_found, -20004);
+    PRAGMA EXCEPTION_INIT(flight_id_not_found, -20005);
+    PRAGMA EXCEPTION_INIT(negative_delay_duration, -20006);
+
+    v_count NUMBER;
+    v_currentDepartureTime VARCHAR(10);
+    v_newDepartureTime VARCHAR(10);
+    v_currentDelayDuration NUMBER;
+
+BEGIN
+    -- Check if the delay ID exists
+    SELECT COUNT(*) INTO v_count
+    FROM FlightDelay
+    WHERE delayId = p_delayId;
+
+    IF v_count = 0 THEN
+        RAISE delay_not_found;
+    END IF;
+
+    -- Check if the flight ID exists
+    SELECT COUNT(*) INTO v_count
+    FROM Flight
+    WHERE flightId = p_flightId;
+
+    IF v_count = 0 THEN
+        RAISE flight_id_not_found;
+    END IF;
+
+    -- Retrieve current departure time and delay duration
+    SELECT delayDuration, newDepartureTime INTO v_currentDelayDuration, v_currentDepartureTime
+    FROM FlightDelay
+    WHERE delayId = p_delayId;
+
+    -- Validate that the delay duration is not negative
+    IF p_delayDuration < 0 THEN
+        RAISE negative_delay_duration;
+    END IF;
+
+    -- Calculate the new departure time
+    v_newDepartureTime := TO_CHAR(
+        TO_DATE(v_currentDepartureTime, 'HH24:MI') + (p_delayDuration - v_currentDelayDuration) / 1440,
+        'HH24:MI'
+    );
+
+    -- Update FlightDelay record
+    UPDATE FlightDelay
+    SET flightId = p_flightId,
+        reason = p_reason,
+        delayDuration = p_delayDuration,
+        newDepartureTime = v_newDepartureTime
+    WHERE delayId = p_delayId;
+
+    DBMS_OUTPUT.PUT_LINE('Flight delay updated successfully.');
+
+EXCEPTION
+    WHEN delay_not_found THEN
+        RAISE_APPLICATION_ERROR(-20004, 'Delay ID not found: ' || p_delayId);
+    WHEN flight_id_not_found THEN
+        RAISE_APPLICATION_ERROR(-20005, 'Flight ID not found: ' || p_flightId);
+    WHEN negative_delay_duration THEN
+        RAISE_APPLICATION_ERROR(-20006, 'Delay duration cannot be negative.');
+END UpdateFlightDelay;
+/

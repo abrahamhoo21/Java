@@ -1,0 +1,52 @@
+SET linesize 150
+SET serveroutput ON
+ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD';
+
+CREATE OR REPLACE PROCEDURE RetrieveFlightInfo (
+    p_flightId IN VARCHAR
+) IS
+    CURSOR flight_cursor IS
+        SELECT f.flightId, f.airplaneId, f.origin, f.destination, f.departureTime, f.arrivalTime, f.flightDate,
+               a.model, a.capacity
+        FROM Flight f
+        JOIN Airplane a ON f.airplaneId = a.airplaneId
+        WHERE f.flightId = p_flightId;
+        
+    v_flightId Flight.flightId%TYPE;
+    v_airplaneId Flight.airplaneId%TYPE;
+    v_origin Flight.origin%TYPE;
+    v_destination Flight.destination%TYPE;
+    v_departureTime Flight.departureTime%TYPE;
+    v_arrivalTime Flight.arrivalTime%TYPE;
+    v_flightDate Flight.flightDate%TYPE;
+    v_model Airplane.model%TYPE;
+    v_capacity Airplane.capacity%TYPE;
+    
+BEGIN
+    OPEN flight_cursor;
+    
+    FETCH flight_cursor INTO v_flightId, v_airplaneId, v_origin, v_destination, v_departureTime, v_arrivalTime, v_flightDate, v_model, v_capacity;
+    
+    IF flight_cursor%FOUND THEN
+	DBMS_OUTPUT.PUT_LINE('	---------------------------------------');
+    	DBMS_OUTPUT.PUT_LINE('	  Flight ID '|| v_flightId ||' Information Report        ');
+    	DBMS_OUTPUT.PUT_LINE('	---------------------------------------');
+        DBMS_OUTPUT.PUT_LINE('	Airplane ID		: ' || v_airplaneId);
+        DBMS_OUTPUT.PUT_LINE('	Origin			: ' || v_origin);
+        DBMS_OUTPUT.PUT_LINE('	Destination		: ' || v_destination);
+        DBMS_OUTPUT.PUT_LINE('	Departure Time		: ' || v_departureTime);
+        DBMS_OUTPUT.PUT_LINE('	Arrival Time		: ' || v_arrivalTime);
+        DBMS_OUTPUT.PUT_LINE('	Flight Date		: ' || TO_CHAR(v_flightDate, 'YYYY-MM-DD'));
+        DBMS_OUTPUT.PUT_LINE('	Airplane Model		: ' || v_model);
+        DBMS_OUTPUT.PUT_LINE('	Airplane Capacity	: ' || v_capacity);
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('No flight found with the provided Flight ID: ' || p_flightId);
+    END IF;
+    
+    CLOSE flight_cursor;
+    
+END;
+/
+
+EXEC RetrieveFlightInfo('F200'); 
+EXEC RetrieveFlightInfo('F999');

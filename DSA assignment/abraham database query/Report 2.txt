@@ -1,0 +1,119 @@
+set serveroutput ON
+ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD';
+
+CREATE OR REPLACE FUNCTION calc_average_delay (
+    totalDelay IN NUMBER,
+    delayedFlights IN NUMBER
+) RETURN NUMBER IS
+    averageDelay NUMBER;
+BEGIN
+    IF delayedFlights = 0 THEN
+        averageDelay := 0;
+    ELSE
+        averageDelay := totalDelay / delayedFlights;
+    END IF;
+    RETURN ROUND(averageDelay, 2);
+END;
+/
+
+CREATE OR REPLACE PROCEDURE prc_flight_delay_summary (
+    v_startDate IN DATE,
+    v_endDate IN DATE
+) IS
+    CURSOR flight_cursor IS
+        SELECT f.flightId, f.flightDate, f.origin, f.destination
+        FROM Flight f
+        WHERE f.flightDate BETWEEN v_startDate AND v_endDate
+        ORDER BY f.flightDate;
+
+    CURSOR delay_cursor(p_flightId VARCHAR) IS
+        SELECT d.reason, d.delayDuration
+        FROM FlightDelay d
+        WHERE d.flightId = p_flightId;
+
+    v_flightId Flight.flightId%TYPE;
+    v_flightDate Flight.flightDate%TYPE;
+    v_origin Flight.origin%TYPE;
+    v_destination Flight.destination%TYPE;
+    v_reason FlightDelay.reason%TYPE;
+    v_delayDuration FlightDelay.delayDuration%TYPE;
+    v_totalDelayMinutes NUMBER := 0;
+    v_delayedFlightCount NUMBER := 0;
+    v_averageDelay NUMBER := 0;
+
+BEGIN
+    -- Report Heading
+    DBMS_OUTPUT.PUT_LINE('			-------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('				Flight Delay Summary Report');
+    DBMS_OUTPUT.PUT_LINE('			-------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE(LPAD('				Period: ' || TO_CHAR(v_startDate, 'DD-MON-YYYY') || ' to ' || TO_CHAR(v_endDate, 'DD-MON-YYYY'), 50));
+    DBMS_OUTPUT.PUT_LINE('			-------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE(LPAD('-', 120, '-'));
+
+    -- Print the headings
+    DBMS_OUTPUT.PUT_LINE(
+        RPAD('Flight ID', 12) || ' | ' || 
+        RPAD('Date', 12) || ' | ' || 
+        RPAD('Origin', 15) || ' | ' ||
+        RPAD('Destination', 15) || ' | ' || 
+        RPAD('Delay Reason', 30) || ' | ' || 
+        RPAD('Delay Duration (min)', 20)
+    );
+    DBMS_OUTPUT.PUT_LINE(LPAD('-', 120, '-'));
+
+    OPEN flight_cursor;
+    LOOP
+        FETCH flight_cursor INTO v_flightId, v_flightDate, v_origin, v_destination;
+        EXIT WHEN flight_cursor%NOTFOUND;
+
+        OPEN delay_cursor(v_flightId);
+        LOOP
+            FETCH delay_cursor INTO v_reason, v_delayDuration;
+            EXIT WHEN delay_cursor%NOTFOUND;
+
+            -- Increment delayed flight count
+            v_delayedFlightCount := v_delayedFlightCount + 1;
+
+            -- Output each delay entry
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(v_flightId, 12) || ' | ' || 
+                RPAD(TO_CHAR(v_flightDate, 'DD-MON-YYYY'), 12) || ' | ' || 
+                RPAD(v_origin, 15) || ' | ' || 
+                RPAD(v_destination, 15) || ' | ' || 
+                RPAD(v_reason, 30) || ' | ' || 
+                RPAD(TO_CHAR(v_delayDuration, '999'), 20)
+            );
+
+            -- Accumulate total delay minutes
+            v_totalDelayMinutes := v_totalDelayMinutes + v_delayDuration;
+        END LOOP;
+        CLOSE delay_cursor;
+    END LOOP;
+    CLOSE flight_cursor;
+
+    -- Calculate average delay using function
+    v_averageDelay := calc_average_delay(v_totalDelayMinutes, v_delayedFlightCount);
+
+    -- Footer with Overall Total Delay and Average Delay
+    DBMS_OUTPUT.PUT_LINE(LPAD('-', 120, '-'));
+    DBMS_OUTPUT.PUT_LINE(LPAD('-', 50, '-'));
+
+    -- Display total delay, count of delayed flights, and average delay
+    DBMS_OUTPUT.PUT_LINE(
+        RPAD('Total Delay (minutes)	:', 25) || 
+        RPAD(TO_CHAR(v_totalDelayMinutes, '999,999,999'), 25)
+    );
+    DBMS_OUTPUT.PUT_LINE(
+        RPAD('Delayed Flights Count	:', 29) || 
+        RPAD(TO_CHAR(v_delayedFlightCount, '999,999'), 25)
+    );
+    DBMS_OUTPUT.PUT_LINE(
+        RPAD('Average Delay (minutes)	:', 27) || 
+        RPAD(TO_CHAR(v_averageDelay, '999,999,999'), 25)
+    );
+    DBMS_OUTPUT.PUT_LINE(LPAD('=', 50, '='));
+    DBMS_OUTPUT.PUT_LINE(LPAD('=', 18, '=') || ' End of Report ' || LPAD('=', 18, '='));
+END;
+/ 
+ 
+EXEC prc_flight_delay_summary('2023-01-01', '2024-12-31');
